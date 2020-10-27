@@ -2,7 +2,7 @@ const express = require('express')
 const socletio = require('socket.io')
 const http = require('http')
 
-const {addUser,removeUser,getUser,makeMove,getGameBoard,addGame,setUserReady,getUsersInRoom,isAllReady} = require('./users.js')
+const {addUser,removeUser,getUser,makeLastMove,tieResponse,makeMove,getGameBoard,addGame,setUserReady,getUsersInRoom,isAllReady} = require('./users.js')
 
 
 const PORT = process.env.PORT || 4000;
@@ -44,11 +44,26 @@ io.on('connection', (socket) => {
     })
 
     socket.on('move', ({room,x_index,y_index,from_x,from_y},callback) => {
-        const game = makeMove(room,x_index,y_index,from_x,from_y)
+        const {game,result_code} = makeMove(room,x_index,y_index,from_x,from_y)
+        if(result_code === 4){
+            io.to(room).emit('player_won' , game.turn)
+            return
+        }
+        if(result_code === 2){
+            io.to(room).emit('tie' , game)
+            return 
+        }
         console.log(game)
         // const game = getGameBoard(room)
         io.to(room).emit('updateGame' , game)
         // callback()
+    })
+
+    socket.on('tieBreak', ({tie_response,room},callback) => {
+        if(tieResponse(socket.id,tie_response)){
+            io.to(room).emit('tieEnd' , makeLastMove(socket.id).result_code === 2)
+            io.to(room).emit('updateGame' , getGameBoard(room))
+        }
     })
 
     socket.on('playerReady', ({room,board},callback) => {

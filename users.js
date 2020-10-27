@@ -70,7 +70,7 @@ const addGame = (room) => {
         return {error: 'Username is already taken'}
     }
     let first_player_board = existingUsers[0]['board'].slice(-2)
-    first_player_board = first_player_board.map((column) => {
+    first_player_board = first_player_board.slice(0).reverse().map((column) => {
         return (
             column.map((tile) => {
                 return({player_id:(tile === 0 )? -1 : 0 , tile})
@@ -93,7 +93,7 @@ const addGame = (room) => {
     })
     const board = first_player_board.concat(middle_of_board).concat(second_player_board)
     console.log("merrgedBoard", board)
-    const game = {room,board,turn:true};
+    const game = {room,board,turn:true,player_chosen_tie_break:false};
     games.push(game)
     return game
 }
@@ -126,7 +126,13 @@ function wins(tile_1,tile_2){
     }
     return 0
 }
+const makeLastMove = (socket_id) => {
+    const index = users.findIndex((user) => user.socket_id === socket_id)
+    const user = users[index]
+    const game = games.find((game) => game.room === user.room)
+    return makeMove(game['room'],game['last_move']['x_index'],game['last_move']['y_index'],game['last_move']['from_x'],game['last_move']['from_y'])
 
+}
 const makeMove = (room,x_index,y_index,from_x,from_y) => {
     const game_index = games.findIndex((game) => game.room === room)
     const turn = games[game_index]['turn']
@@ -160,14 +166,16 @@ const makeMove = (room,x_index,y_index,from_x,from_y) => {
             break;
             case 2:
                     console.log("tie " , 2)
-                //won
+                    games[game_index]['last_move'] = {x_index,y_index,from_x,from_y}
+                //tie
+                    return {game:null,result_code:2}
+            case 3:
                     games[game_index].board[x_index][y_index] =
-                    {player_id:(turn) ? 0 : 1, tile:board[from_x][from_y]['tile']} 
-            break;
-            case 4:
+                    {player_id:(turn) ? 1 : 0, tile:board[x_index][y_index]['tile']}
                 // mehabel
             break;
-            case 5:
+            case 4:
+                    return {game:games[game_index],result_code:4}
                 // flag
             break;
         
@@ -184,7 +192,29 @@ const makeMove = (room,x_index,y_index,from_x,from_y) => {
 
     
     games[game_index].turn = !turn
-    return games[game_index]
+    return {game:games[game_index],result_code:0}
 }
 
-module.exports = {addUser,makeMove,removeUser,getUser,getUsersInRoom,getGameBoard,addGame,isAllReady,setUserReady}
+const tieResponse = (socket_id,tie_response) => {
+    const index = users.findIndex((user) => user.socket_id === socket_id)
+    const user = users[index]
+    const game_index = games.findIndex((game) => game.room === user.room)
+    const turn = (games[game_index]['turn']) ? 0 : 1
+    const game = games[game_index]
+    console.log(socket_id,tie_response,index,game_index)
+    if(turn === user.player_id){
+        games[game_index]['board'][game['last_move']['from_x']][game['last_move']['from_y']] = {player_id:user.player_id,tile:tie_response }
+    }else{
+        games[game_index]['board'][game['last_move']['x_index']][game['last_move']['y_index']] = {player_id:user.player_id,tile:tie_response }
+    }
+    if(games[game_index]['player_chosen_tie_break'] && games[game_index]['player_chosen_tie_break'] === true){
+        games[game_index]['player_chosen_tie_break'] = false
+        return true
+    }
+    games[game_index]['player_chosen_tie_break'] = true
+    return false
+}
+
+
+
+module.exports = {addUser,makeMove,removeUser,makeLastMove,tieResponse,getUser,getUsersInRoom,getGameBoard,addGame,isAllReady,setUserReady}
